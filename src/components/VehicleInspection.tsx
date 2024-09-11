@@ -11,14 +11,15 @@ const VehicleInspection = () => {
   const [isMobile, setIsMobile] = useState<boolean>(false);
   const videoRef = useRef<HTMLVideoElement>(null);
 
+  // Verifica se o usuário está em um dispositivo móvel
   useEffect(() => {
-    // Verifica se o usuário está usando um celular
-    const userAgent = navigator.userAgent || navigator.vendor //|| (window as any).opera;
-    
-    setIsMobile(/android|ipad|iphone|ipod/.test(userAgent.toLowerCase()));
+    const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+    setIsMobile(!/android|ipad|iphone|ipod/.test(userAgent.toLowerCase()));
+  }, []);
 
+  // Obtém a localização do usuário
+  useEffect(() => {
     if (isMobile) {
-      // Obtém localização do usuário
       navigator.geolocation.getCurrentPosition(
         (position) => {
           setLocation({
@@ -27,7 +28,7 @@ const VehicleInspection = () => {
           });
         },
         (error) => {
-          console.error("Error getting location:", error);
+          console.error("Erro ao obter localização:", error);
         }
       );
     }
@@ -43,6 +44,19 @@ const VehicleInspection = () => {
       videoRef.current.play();
     }
   };
+
+  // Função para parar a câmera e liberar recursos
+  const stopCamera = () => {
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach(track => track.stop());
+    }
+  };
+
+  // Limpeza ao desmontar o componente ou ocultar a câmera
+  useEffect(() => {
+    return () => stopCamera();
+  }, []);
 
   const handleTakePhoto = () => {
     if (videoRef.current) {
@@ -67,6 +81,7 @@ const VehicleInspection = () => {
   const handleConfirmPhoto = () => {
     setPhotoPreview(null);
     setShowCamera(false);
+    stopCamera(); // Adicionei para liberar a câmera quando a foto for confirmada
     if (currentStep < steps.length - 1) {
       setCurrentStep(currentStep + 1);
     } else {
@@ -78,9 +93,10 @@ const VehicleInspection = () => {
     const formData = new FormData();
     photos.forEach((photo, index) => {
       formData.append(`photo${index + 1}`, photo);
-      formData.append(`location${index + 1}`, JSON.stringify(location)); // Adiciona localização
-      formData.append(`timestamp${index + 1}`, timestamp || ""); // Adiciona data e hora
     });
+
+    formData.append("location", JSON.stringify(location)); // Localização constante
+    formData.append("timestamp", timestamp || ""); // Data e hora constantes
 
     console.log(photos);
     
@@ -102,9 +118,6 @@ const VehicleInspection = () => {
 
   return (
     <div className="p-0">
-      {/* <h1 className="text-xl">Vistoria Veicular</h1>
-      <p>Código do Veículo: ABC123</p> */}
-
       {isMobile ? (
         photoPreview ? (
           // Exibir a foto tirada e opções de confirmação/refazer
@@ -120,7 +133,12 @@ const VehicleInspection = () => {
                         Avançar
                         </button>
                         <button
-                        onClick={() => setShowCamera(true)}
+                        onClick={() => {
+                          setShowCamera(true)
+                          const currentCamera = steps[currentStep].camera;
+                          startCamera(currentCamera as "user" | "environment"); // Reinicia a camera
+                          setPhotoPreview(null) // Remove a pré-visualização anterior
+                        }}
                         className="bg-red-500 text-white px-4 py-2 rounded"
                         >
                         Refazer
@@ -149,10 +167,7 @@ const VehicleInspection = () => {
         ) : (
           // Exibir o exemplo e botão de avançar para a câmera
           <div className="">
-            <img src={steps[currentStep].example} alt="Exemplo de foto" className="my-0 h-screen" /> {/* my-4*/}
-            {/* <p className="mb-2">
-              {steps[currentStep].camera === "user" ? "Use a câmera frontal" : "Use a câmera traseira"}
-            </p> */}
+            <img src={steps[currentStep].example} alt="Exemplo de foto" className="w-full h-screen object-cover" />
             <div className="fixed w-screen bottom-8 flex justify-center">
                 <button
                 onClick={handleAdvanceToCamera}
@@ -164,7 +179,7 @@ const VehicleInspection = () => {
           </div>
         )
       ) : (
-        <div className="flex flex-col flex">
+        <div className="flex flex-col">
             <h2>Dispositivo não aceito!</h2>
             <p>Por favor, acesse esta página a partir de um dispositivo móvel.</p>
         </div>
